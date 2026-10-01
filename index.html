@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>大都會捷運行控中心 — 系統監控</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#050a12; --panel:#0b1622; --line:#1e3348;
+  --cyan:#28e0ff; --amber:#ffb020; --red:#ff3b4e; --green:#2ee6a6;
+  --text:#cfe8f5; --text-dim:#5f7c8f; --text-faint:#33495c;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); box-sizing:border-box;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;background:var(--bg);}
+body{font-family:'Noto Sans TC',sans-serif;color:var(--text);
+  background:radial-gradient(ellipse at 50% -10%,#0d1c2c 0%,var(--bg) 60%);}
+.mono{font-family:'Share Tech Mono',monospace;}
+button{font-family:inherit;cursor:pointer;}
+#app{display:flex;flex-direction:column;height:100%;width:100%;}
+
+.topbar{display:flex;align-items:center;gap:20px;padding:10px 20px;padding-top:calc(10px + env(safe-area-inset-top,0px));
+  background:var(--panel);border-bottom:1px solid var(--line);flex-shrink:0;flex-wrap:wrap;}
+.brand{font-weight:900;font-size:15px;letter-spacing:2px;}
+.brand small{display:block;font-weight:400;font-size:10px;color:var(--text-dim);letter-spacing:3px;margin-top:2px;}
+.sep{width:1px;height:26px;background:var(--line);}
+.clock{font-size:20px;color:var(--cyan);letter-spacing:1px;}
+.clock .date{font-size:11px;color:var(--text-dim);display:block;margin-top:1px;}
+.status-pills{display:flex;gap:10px;margin-left:auto;flex-wrap:wrap;}
+.pill{display:flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid var(--line);border-radius:3px;font-size:12px;background:#081119;}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);}
+.dot.warn{background:var(--amber);box-shadow:0 0 6px var(--amber);}
+.dot.blink{animation:blink 1s infinite;}
+@keyframes blink{50%{opacity:.25;}}
+
+.section-lbl{padding:9px 20px;font-size:11px;letter-spacing:3px;color:var(--text-dim);background:var(--panel);border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
+
+main{flex:1;min-height:0;overflow-y:auto;}
+.panel{background:var(--panel);display:flex;flex-direction:column;min-height:0;overflow:hidden;}
+.panel-head{padding:9px 14px;font-size:11px;letter-spacing:2px;color:var(--text-dim);border-bottom:1px solid var(--line);flex-shrink:0;display:flex;justify-content:space-between;}
+.panel-body{flex:1;overflow-y:auto;overflow-x:hidden;padding:10px;min-height:0;}
+.panel-body::-webkit-scrollbar{width:5px;}
+.panel-body::-webkit-scrollbar-thumb{background:var(--line);}
+.line-row{display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid #101c28;}
+.line-chip{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#04121a;flex-shrink:0;}
+.line-info{flex:1;min-width:0;}
+.line-name{font-size:12px;}
+.line-sub{font-size:10px;color:var(--text-dim);}
+.line-state{font-size:10px;padding:2px 6px;border-radius:2px;white-space:nowrap;}
+.state-normal{color:var(--green);border:1px solid #0f4a38;}
+.state-delay{color:var(--amber);border:1px solid #5a4014;}
+
+/* ---- row 1: overview ---- */
+.row-overview{display:grid;grid-template-columns:230px 1fr 300px;gap:1px;background:var(--line);height:460px;}
+.map-wrap{position:relative;flex:1;min-height:0;}
+svg{width:100%;height:100%;display:block;}
+.rail{fill:none;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;opacity:.95;}
+.rail-glow{fill:none;stroke-width:13;stroke-linecap:round;stroke-linejoin:round;opacity:.14;filter:blur(3px);}
+.station{fill:#08131e;stroke-width:2.5;r:4.5;}
+.train-trail{opacity:.35;}
+.station-lbl{font-family:'Noto Sans TC',sans-serif;font-size:10px;fill:var(--text);font-weight:500;}
+.station-lbl.sub{fill:var(--text-dim);font-size:8px;font-family:'Share Tech Mono',monospace;}
+.station-chip{fill:#08131e;opacity:.82;}
+.interchange{fill:#08131e;stroke-width:2.5;}
+.interchange-lbl{font-family:'Noto Sans TC',sans-serif;font-size:10.5px;fill:var(--text);font-weight:700;}
+.term-badge circle{stroke-width:1.5;fill:#08131e;}
+.term-badge text{font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:700;text-anchor:middle;dominant-baseline:central;}
+.compass text{font-family:'Share Tech Mono',monospace;fill:var(--text-faint);font-size:10px;}
+.hud-corner{position:absolute;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-faint);}
+.map-footer{display:flex;justify-content:space-between;align-items:center;padding:8px 16px;border-top:1px solid var(--line);font-size:10px;color:var(--text-dim);flex-shrink:0;flex-wrap:wrap;gap:6px;}
+.legend{display:flex;gap:14px;flex-wrap:wrap;}
+.legend span{display:inline-flex;align-items:center;gap:5px;}
+.legend i{width:8px;height:8px;border-radius:50%;display:inline-block;}
+.alert-item{padding:8px 4px;border-bottom:1px solid #101c28;font-size:11.5px;line-height:1.5;display:flex;gap:8px;opacity:0;animation:fadein .4s forwards;}
+@keyframes fadein{to{opacity:1;}}
+.alert-item .t{color:var(--text-faint);flex-shrink:0;font-size:10px;padding-top:1px;}
+.alert-item.crit{color:var(--red);}
+.alert-item.warn2{color:var(--amber);}
+.alert-item.info{color:var(--text-dim);}
+
+/* ---- row 2: cctv ---- */
+.row-cctv{padding:14px 20px;background:var(--bg);}
+.cctv-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;height:240px;}
+.cam{position:relative;background:#020507;border:1px solid var(--line);border-radius:2px;overflow:hidden;display:flex;align-items:flex-end;}
+.cam canvas{position:absolute;inset:0;width:100%;height:100%;opacity:.5;}
+.cam .tag{position:relative;z-index:1;padding:5px 7px;font-size:10.5px;background:linear-gradient(transparent,rgba(0,0,0,.8));width:100%;}
+.cam .tag b{display:block;color:var(--text);font-size:11px;}
+.cam .tag span{color:var(--text-dim);font-size:9px;}
+.cam .rec{position:absolute;top:6px;left:7px;display:flex;align-items:center;gap:4px;font-size:9px;color:var(--red);z-index:1;}
+.cam .rec i{width:6px;height:6px;border-radius:50%;background:var(--red);animation:blink 1s infinite;}
+.cam.flag{outline:1px solid var(--amber);}
+
+/* ---- row 3: dispatch + passenger ---- */
+.row-lower{display:grid;grid-template-columns:1fr 300px 1fr 260px;gap:1px;background:var(--line);height:340px;}
+.dispatch-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;overflow-y:auto;}
+.act-btn{background:#081119;border:1px solid var(--line);border-radius:4px;padding:11px;text-align:left;color:var(--text);}
+.act-btn:hover{border-color:var(--cyan);}
+.act-btn b{display:block;font-size:12.5px;margin-bottom:3px;}
+.act-btn span{font-size:10.5px;color:var(--text-dim);}
+.act-btn.danger:hover{border-color:var(--red);}
+.comm-list{padding:10px;}
+.comm-row{display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid #101c28;font-size:11.5px;}
+.comm-row .name{flex:1;}
+.comm-row button{background:#081119;border:1px solid var(--line);color:var(--cyan);font-size:10px;padding:5px 9px;border-radius:3px;}
+.comm-row button.live{border-color:var(--green);color:var(--green);}
+.pax-station{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #101c28;}
+.pax-station .name{width:80px;font-size:11.5px;flex-shrink:0;}
+.pax-bar{flex:1;height:8px;background:#0e1a26;border-radius:4px;overflow:hidden;}
+.pax-bar i{display:block;height:100%;border-radius:4px;transition:width .8s;}
+.pax-pct{width:36px;text-align:right;font-size:10.5px;color:var(--text-dim);flex-shrink:0;}
+.car-row{display:flex;gap:6px;padding:10px 4px;align-items:center;}
+.car-row .lbl{width:66px;font-size:10.5px;color:var(--text-dim);flex-shrink:0;}
+.car{flex:1;height:24px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#04121a;font-weight:700;}
+
+.kpi-strip{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);flex-shrink:0;background:var(--panel);}
+.kpi{padding:10px 16px;border-right:1px solid var(--line);}
+.kpi:last-child{border-right:none;}
+.kpi .label{font-size:10px;color:var(--text-dim);letter-spacing:1px;}
+.kpi .val{font-size:22px;color:var(--cyan);margin-top:2px;}
+.kpi .val.g{color:var(--green);}
+.kpi .val.a{color:var(--amber);}
+
+@media (max-width:1000px){
+  .row-overview{grid-template-columns:1fr;height:auto;}
+  .row-lower{grid-template-columns:1fr 1fr;height:auto;}
+  .cctv-grid{grid-template-columns:repeat(2,1fr);height:auto;}
+  .cam{height:130px;}
+  .kpi-strip{grid-template-columns:repeat(2,1fr);}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="topbar">
+    <div class="brand">大都會捷運 METRO<small>行控中心 · OPERATIONS CONTROL CENTER</small></div>
+    <div class="sep"></div>
+    <div class="clock mono" id="clock">--:--:--<span class="date" id="dateline">----</span></div>
+    <div class="status-pills">
+      <div class="pill"><span class="dot"></span>系統正常</div>
+      <div class="pill"><span class="dot warn blink"></span>2 則警報待處理</div>
+      <div class="pill mono" id="trainCount">在線列車 —</div>
+    </div>
+  </div>
+
+  <main>
+    <section class="row-overview">
+      <section class="panel">
+        <div class="panel-head"><span>路網狀態 LINE STATUS</span></div>
+        <div class="panel-body" id="lineList"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><span>系統路網圖 SYSTEM MAP</span><span class="mono" id="mapClock"></span></div>
+        <div class="map-wrap">
+          <svg id="mapSvg" viewBox="0 0 900 520" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="hud-corner mono" style="top:10px;left:14px;">GRID REF 24.98N 121.60E</div>
+          <div class="hud-corner mono" style="bottom:10px;right:14px;" id="scanline">SCANNING…</div>
+        </div>
+        <div class="map-footer">
+          <div class="legend"><span><i style="background:#28e0ff"></i>紅線</span><span><i style="background:#2ee6a6"></i>藍線</span><span><i style="background:#ffb020"></i>綠線</span><span><i style="background:#ff3b4e"></i>異常區段</span></div>
+          <div class="mono">TRACK OVERLAY: LIVE</div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><span>事件日誌 EVENT LOG</span></div>
+        <div class="panel-body" id="alertLog"></div>
+      </section>
+    </section>
+
+    <div class="section-lbl">監視牆 CCTV — 全站即時影像</div>
+    <section class="row-cctv">
+      <div class="cctv-grid" id="camGrid"></div>
+    </section>
+
+    <div class="section-lbl">調度操作 DISPATCH · 乘客動態 PASSENGER FLOW</div>
+    <section class="row-lower">
+      <div class="dispatch-actions" id="dispatchActions"></div>
+      <section class="panel">
+        <div class="panel-head"><span>對講機 INTERCOM</span></div>
+        <div class="comm-list" id="commList"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><span>各站人流熱度</span></div>
+        <div class="panel-body" id="paxStations"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><span>車廂擁擠度 R1082</span></div>
+        <div class="panel-body" id="carGrid"></div>
+      </section>
+    </section>
+  </main>
+
+  <div class="kpi-strip">
+    <div class="kpi"><div class="label">準點率 ON-TIME</div><div class="val g" id="kpiOnTime">--%</div></div>
+    <div class="kpi"><div class="label">今日運量 RIDERSHIP</div><div class="val" id="kpiRider">--</div></div>
+    <div class="kpi"><div class="label">平均車間距 HEADWAY</div><div class="val" id="kpiHeadway">-- s</div></div>
+    <div class="kpi"><div class="label">供電電壓 TRACTION V</div><div class="val a" id="kpiVolt">-- kV</div></div>
+  </div>
+</div>
+
+<script>
+function pad(n){return n.toString().padStart(2,'0');}
+function tickClock(){
+  const d=new Date();
+  const t=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  document.getElementById('clock').innerHTML=t+'<span class="date">'+d.getFullYear()+'/'+pad(d.getMonth()+1)+'/'+pad(d.getDate())+' 週'+'日一二三四五六'[d.getDay()]+'</span>';
+  document.getElementById('mapClock').textContent=t;
+}
+tickClock(); setInterval(tickClock,1000);
+
+const lines=[
+  {c:'#28e0ff',n:'紅線 R',s:'淡水—象山',st:'normal'},
+  {c:'#2ee6a6',n:'藍線 BL',s:'頂埔—南港展覽館',st:'normal'},
+  {c:'#ffb020',n:'綠線 G',s:'松山—新店',st:'delay'},
+  {c:'#c792ea',n:'橘線 O',s:'南勢角—迴龍',st:'normal'},
+  {c:'#ff8fb1',n:'棕線 BR',s:'南港展覽館—動物園',st:'normal'},
+  {c:'#ffe066',n:'黃線 Y',s:'環狀線',st:'normal'},
+];
+const lineList=document.getElementById('lineList');
+lines.forEach(l=>{
+  const row=document.createElement('div'); row.className='line-row';
+  row.innerHTML=`<div class="line-chip" style="background:${l.c}">${l.n[0]}</div><div class="line-info"><div class="line-name">${l.n}</div><div class="line-sub">${l.s}</div></div><div class="line-state ${l.st==='normal'?'state-normal':'state-delay'}">${l.st==='normal'?'正常':'延誤'}</div>`;
+  lineList.appendChild(row);
+});
+
+const svgNS="http://www.w3.org/2000/svg";
+const svg=document.getElementById('mapSvg');
+// octilinear (45°/90°) layout, closer to a real transit diagram
+const paths=[
+  {id:'R', d:"M70,460 L210,460 L300,370 L300,260 L420,260 L420,150 L600,150 L680,70 L840,70", color:"#28e0ff",
+   stations:["淡水","北投","士林","雙連","中山","台北車站","善導寺","市政府","象山"]},
+  {id:'BL',d:"M60,120 L220,120 L300,200 L300,260 L380,340 L600,340 L680,420 L850,420", color:"#2ee6a6",
+   stations:["頂埔","板橋","西門","台北車站","善導寺","市政府","國父紀念館","南港展覽館"]},
+  {id:'G', d:"M420,150 L420,300 L500,380 L500,480", color:"#ffb020",
+   stations:["松山","中山","古亭","新店"]},
+];
+for(let x=40;x<=900;x+=60){const l=document.createElementNS(svgNS,'line');l.setAttribute('x1',x);l.setAttribute('y1',0);l.setAttribute('x2',x);l.setAttribute('y2',520);l.setAttribute('stroke','#0f1e2c');svg.appendChild(l);}
+for(let y=20;y<=520;y+=60){const l=document.createElementNS(svgNS,'line');l.setAttribute('x1',0);l.setAttribute('y1',y);l.setAttribute('x2',900);l.setAttribute('y2',y);l.setAttribute('stroke','#0f1e2c');svg.appendChild(l);}
+paths.forEach((p,i)=>{
+  const glow=document.createElementNS(svgNS,'path');glow.setAttribute('d',p.d);glow.setAttribute('class','rail-glow');glow.setAttribute('stroke',p.color);svg.appendChild(glow);
+  const rail=document.createElementNS(svgNS,'path');rail.setAttribute('d',p.d);rail.setAttribute('class','rail');rail.setAttribute('stroke',p.color);rail.setAttribute('id','rail'+i);svg.appendChild(rail);
+});
+// interchange stations: shared by name across lines
+const nameCounts={};
+paths.forEach(p=>p.stations.forEach(n=>{nameCounts[n]=(nameCounts[n]||0)+1;}));
+paths.forEach((p,i)=>{
+  const rail=document.getElementById('rail'+i); const len=rail.getTotalLength();
+  p.stations.forEach((name,j)=>{
+    const pt=rail.getPointAtLength(len*(j/(p.stations.length-1)));
+    const isInterchange=nameCounts[name]>1;
+    const above=j%2===0;
+    if(isInterchange){
+      const c=document.createElementNS(svgNS,'circle');c.setAttribute('class','interchange');c.setAttribute('cx',pt.x);c.setAttribute('cy',pt.y);c.setAttribute('r',8);c.setAttribute('stroke',p.color);svg.appendChild(c);
+    }else{
+      const c=document.createElementNS(svgNS,'circle');c.setAttribute('class','station');c.setAttribute('cx',pt.x);c.setAttribute('cy',pt.y);c.setAttribute('stroke',p.color);svg.appendChild(c);
+    }
+    // label with background chip for legibility, drawn once (avoid dup for shared interchange stations on 2nd pass)
+    if(!isInterchange || i===paths.findIndex(pp=>pp.stations.includes(name))){
+      const lx=pt.x+10, ly=above?pt.y-10:pt.y+16;
+      const chip=document.createElementNS(svgNS,'rect');chip.setAttribute('class','station-chip');chip.setAttribute('x',lx-3);chip.setAttribute('y',ly-11);chip.setAttribute('width',name.length*10+6);chip.setAttribute('height',14);chip.setAttribute('rx',2);svg.appendChild(chip);
+      const t=document.createElementNS(svgNS,'text');t.setAttribute('class',isInterchange?'interchange-lbl':'station-lbl');t.setAttribute('x',lx);t.setAttribute('y',ly);t.textContent=name;svg.appendChild(t);
+    }
+  });
+});
+// terminus badges (line letter in a colored ring) at each line's start/end
+paths.forEach((p,i)=>{
+  const rail=document.getElementById('rail'+i); const len=rail.getTotalLength();
+  [0,len].forEach(pos=>{
+    const pt=rail.getPointAtLength(pos);
+    const g=document.createElementNS(svgNS,'g');g.setAttribute('class','term-badge');
+    const c=document.createElementNS(svgNS,'circle');c.setAttribute('cx',pt.x);c.setAttribute('cy',pt.y);c.setAttribute('r',11);c.setAttribute('stroke',p.color);g.appendChild(c);
+    const t=document.createElementNS(svgNS,'text');t.setAttribute('x',pt.x);t.setAttribute('y',pt.y+1);t.setAttribute('fill',p.color);t.textContent=p.id;g.appendChild(t);
+    svg.appendChild(g);
+  });
+});
+// compass + scale bar
+const compass=document.createElementNS(svgNS,'g');compass.setAttribute('class','compass');
+compass.innerHTML='<circle cx="858" cy="30" r="16" fill="none" stroke="#1e3348" stroke-width="1.5"/><path d="M858,18 L858,42 M846,30 L870,30" stroke="#33495c" stroke-width="1"/><text x="858" y="12" text-anchor="middle">N</text>';
+svg.appendChild(compass);
+const scale=document.createElementNS(svgNS,'g');
+scale.innerHTML='<line x1="740" y1="498" x2="800" y2="498" stroke="#33495c" stroke-width="1.5"/><line x1="740" y1="494" x2="740" y2="502" stroke="#33495c"/><line x1="800" y1="494" x2="800" y2="502" stroke="#33495c"/><text x="770" y="512" text-anchor="middle" font-family="Share Tech Mono" font-size="9" fill="#33495c">2 KM</text>';
+svg.appendChild(scale);
+// trains with fading trail
+const trains=[];
+paths.forEach((p,i)=>{
+  const rail=document.getElementById('rail'+i); const len=rail.getTotalLength();
+  for(let k=0;k<2;k++){
+    const trailEls=[0,1,2].map(()=>{const d=document.createElementNS(svgNS,'circle');d.setAttribute('r',3.4);d.setAttribute('fill',p.color);d.setAttribute('class','train-trail');svg.appendChild(d);return d;});
+    const dot=document.createElementNS(svgNS,'circle');dot.setAttribute('r',5.5);dot.setAttribute('fill',p.color);dot.style.filter='drop-shadow(0 0 5px '+p.color+')';svg.appendChild(dot);
+    trains.push({rail,len,el:dot,trailEls,history:[],offset:k/2,dir:k%2===0?1:-1,speed:0.00008+Math.random()*0.00003});
+  }
+});
+let lastT=performance.now();
+function animate(now){
+  const dt=now-lastT; lastT=now;
+  trains.forEach(tr=>{
+    tr.offset+=tr.dir*tr.speed*dt; if(tr.offset>1)tr.offset=0; if(tr.offset<0)tr.offset=1;
+    const pt=tr.rail.getPointAtLength(tr.offset*tr.len);
+    tr.history.unshift({x:pt.x,y:pt.y}); if(tr.history.length>tr.trailEls.length+1)tr.history.pop();
+    tr.el.setAttribute('cx',pt.x); tr.el.setAttribute('cy',pt.y);
+    tr.trailEls.forEach((el,idx)=>{const h=tr.history[idx+1];if(h){el.setAttribute('cx',h.x);el.setAttribute('cy',h.y);el.style.opacity=0.32-idx*0.1;}});
+  });
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+const scanWords=["SCANNING…","TRACK CLEAR","SIGNAL OK","SYNC 100%"];
+let sw=0; setInterval(()=>{document.getElementById('scanline').textContent=scanWords[sw++%scanWords.length];},2200);
+
+const alertTemplates=[
+  {lvl:'info', txt:'紅線列車 R1082 準點進站 — 台北車站'},
+  {lvl:'info', txt:'藍線月台門開啟正常 — 市府站'},
+  {lvl:'warn2',txt:'綠線 G 段偵測輕微延誤，已調整發車間距'},
+  {lvl:'info', txt:'例行軌道巡檢完成 — 第 3 區間'},
+  {lvl:'crit', txt:'異常：象山站月台感應器回報訊號延遲，派員確認中'},
+  {lvl:'info', txt:'尖峰時段加開列車已投入營運'},
+  {lvl:'warn2',txt:'南港展覽館站進站人流偏高，加強引導'},
+  {lvl:'info', txt:'供電系統自檢通過，電壓穩定'},
+];
+const alertLog=document.getElementById('alertLog');
+function addAlert(customTxt,customLvl){
+  const a=customTxt?{lvl:customLvl||'warn2',txt:customTxt}:alertTemplates[Math.floor(Math.random()*alertTemplates.length)];
+  const d=new Date();
+  const row=document.createElement('div'); row.className='alert-item '+a.lvl;
+  row.innerHTML=`<span class="t mono">${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}</span><span>${a.txt}</span>`;
+  alertLog.insertBefore(row,alertLog.firstChild);
+  while(alertLog.children.length>30)alertLog.removeChild(alertLog.lastChild);
+}
+for(let i=0;i<6;i++)addAlert();
+setInterval(addAlert,3200);
+
+const camStations=["台北車站 大廳","象山站 月台","市府站 月台","南港展覽館 出口","北投站 大廳","古亭站 月台","板橋站 轉乘層","新店站 月台"];
+const camGrid=document.getElementById('camGrid');
+camStations.forEach((name,i)=>{
+  const cam=document.createElement('div'); cam.className='cam'+(i===2?' flag':'');
+  cam.innerHTML=`<canvas id="cam${i}"></canvas><div class="rec"><i></i>REC</div><div class="tag"><b>CAM ${String(i+1).padStart(2,'0')}</b><span>${name}</span></div>`;
+  camGrid.appendChild(cam);
+});
+function drawNoise(){
+  camStations.forEach((_,i)=>{
+    const cv=document.getElementById('cam'+i); if(!cv||!cv.offsetWidth)return;
+    cv.width=cv.offsetWidth/4; cv.height=cv.offsetHeight/4;
+    const ctx=cv.getContext('2d'); const id=ctx.createImageData(cv.width,cv.height);
+    for(let p=0;p<id.data.length;p+=4){const v=Math.random()*40+10;id.data[p]=v;id.data[p+1]=v+10;id.data[p+2]=v+15;id.data[p+3]=255;}
+    ctx.putImageData(id,0,0);
+  });
+}
+setInterval(drawNoise,180); drawNoise();
+
+const actions=[
+  {t:'延後發車',d:'延後下一班列車發車 90 秒',danger:false},
+  {t:'加開班次',d:'尖峰路段插入一班加班車',danger:false},
+  {t:'封鎖區間',d:'暫時封鎖選定閉塞區間',danger:true},
+  {t:'降速指令',d:'指定路段限速 40km/h',danger:false},
+];
+const dispatchActions=document.getElementById('dispatchActions');
+actions.forEach(a=>{
+  const b=document.createElement('button'); b.className='act-btn'+(a.danger?' danger':'');
+  b.innerHTML=`<b>${a.t}</b><span>${a.d}</span>`;
+  b.onclick=()=>addAlert('指令已下達：'+a.t,a.danger?'crit':'warn2');
+  dispatchActions.appendChild(b);
+});
+const commTargets=["台北車站 站務","象山站 站務","R1082 司機室","維修調度組"];
+const commList=document.getElementById('commList');
+commTargets.forEach(name=>{
+  const row=document.createElement('div'); row.className='comm-row';
+  row.innerHTML=`<span class="name">${name}</span><button>連線 CALL</button>`;
+  const btn=row.querySelector('button');
+  btn.onclick=()=>{ btn.textContent='通話中…'; btn.classList.add('live'); setTimeout(()=>{btn.textContent='連線 CALL'; btn.classList.remove('live');},4000);};
+  commList.appendChild(row);
+});
+
+const paxStations=document.getElementById('paxStations');
+const paxNames=["台北車站","西門站","市府站","板橋站","南港展覽館","象山站"];
+const paxBars=[];
+paxNames.forEach(name=>{
+  const row=document.createElement('div'); row.className='pax-station';
+  row.innerHTML=`<span class="name">${name}</span><div class="pax-bar"><i></i></div><span class="pax-pct mono">--%</span>`;
+  paxStations.appendChild(row); paxBars.push(row);
+});
+const carGrid=document.getElementById('carGrid'); carGrid.style.padding='14px 10px';
+const carRow=document.createElement('div'); carRow.className='car-row';
+carRow.innerHTML='<span class="lbl">6 節車廂</span>';
+const carEls=[];
+for(let i=0;i<6;i++){const c=document.createElement('div'); c.className='car'; carRow.appendChild(c); carEls.push(c);}
+carGrid.appendChild(carRow);
+function occColor(v){ return v<40?'#2ee6a6':v<70?'#ffb020':'#ff3b4e'; }
+function updatePax(){
+  paxBars.forEach(row=>{
+    const v=Math.round(20+Math.random()*75);
+    row.querySelector('i').style.width=v+'%'; row.querySelector('i').style.background=occColor(v);
+    row.querySelector('.pax-pct').textContent=v+'%';
+  });
+  carEls.forEach(c=>{ const v=Math.round(15+Math.random()*80); c.style.background=occColor(v); c.textContent=v+'%'; });
+}
+updatePax(); setInterval(updatePax,2600);
+
+function jitter(base,range){return base+(Math.random()-0.5)*range;}
+function updateKpis(){
+  document.getElementById('kpiOnTime').textContent=jitter(98.4,0.6).toFixed(1)+'%';
+  document.getElementById('kpiRider').textContent=Math.round(jitter(612000,15000)).toLocaleString();
+  document.getElementById('kpiHeadway').textContent=Math.round(jitter(118,10))+' s';
+  document.getElementById('kpiVolt').textContent=jitter(24.9,0.4).toFixed(1)+' kV';
+  document.getElementById('trainCount').textContent='在線列車 '+Math.round(jitter(146,6));
+}
+updateKpis(); setInterval(updateKpis,2500);
+</script>
+</body>
+</html>
